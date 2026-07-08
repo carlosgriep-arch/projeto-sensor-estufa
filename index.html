@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Painel Automático da Estufa</title>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
+
+    <style>
+      body {
+        font-family: "Segoe UI", Arial, sans-serif;
+        margin: 30px;
+        background-color: #eef2f3;
+        color: #333;
+      }
+      .container {
+        max-width: 800px;
+        margin: 0 auto;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 20px;
+      }
+      .card {
+        background: white;
+        padding: 20px;
+        border-radius: 12px;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+      }
+      .status {
+        font-size: 24px;
+        font-weight: bold;
+        color: #28a745;
+        margin: 10px 0;
+      }
+      .alerta-item {
+        background: #fff5f5;
+        border-left: 6px solid #e74c3c;
+        padding: 12px;
+        margin: 8px 0;
+        border-radius: 6px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.02);
+      }
+      .badge {
+        background: #e74c3c;
+        color: white;
+        padding: 3px 8px;
+        border-radius: 4px;
+        font-size: 12px;
+        font-weight: bold;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>🌿 Monitoramento Automatizado da Estufa</h1>
+      <p>
+        Status:
+        <span style="color: #2980b9; font-weight: bold"
+          >Rodando no modo automático (Simulação de Sensor)</span
+        >
+      </p>
+
+      <div class="grid">
+        <div class="card">
+          <h2>📊 Sensor Atual (Atualiza a cada 5s)</h2>
+          <hr />
+          <div>Temperatura: <span id="lblTemp" class="status">-- °C</span></div>
+          <div>Umidade: <span id="lblUmi" class="status">-- %</span></div>
+          <p style="font-size: 12px; color: #7f8c8d" id="lblEnvio">
+            Aguardando primeiro envio...
+          </p>
+        </div>
+
+        <div class="card">
+          <h2>🚨 Alertas de Ressecamento (Últimas 24h)</h2>
+          <hr />
+          <div id="listaAlertas" style="max-height: 350px; overflow-y: auto">
+            <p>Nenhum perigo detectado até agora... 🌱</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const firebaseConfig = {
+        apiKey: "AIzaSyD1WlYCrAYUW1PR02L8OmRGxp-5C3UMy-k",
+        authDomain: "estufaapi-73d82.firebaseapp.com",
+        projectId: "estufaapi-73d82",
+        databaseURL: "https://estufaapi-73d82-default-rtdb.firebaseio.com/",
+        storageBucket: "estufaapi-73d82.firebasestorage.app",
+        messagingSenderId: "958140858411",
+        appId: "1:958140858411:web:bb640615f6278080e12a6e",
+      };
+
+      firebase.initializeApp(firebaseConfig);
+      const database = firebase.database();
+
+      const API_URL = "http://localhost:5290/api/Estufa/leitura";
+
+      database
+        .ref("alertas")
+        .limitToLast(10)
+        .on("value", (snapshot) => {
+          const container = document.getElementById("listaAlertas");
+          container.innerHTML = "";
+
+          const dados = snapshot.val();
+          if (!dados) {
+            container.innerHTML =
+              "<p>Nenhum alerta registrado. Plantas seguras! 🌱</p>";
+            return;
+          }
+
+          const limiteTempo = Date.now() - 24 * 60 * 60 * 1000;
+
+          Object.keys(dados)
+            .reverse()
+            .forEach((key) => {
+              const alerta = dados[key];
+
+              const mensagem =
+                alerta.Mensagem || alerta.mensagem || "Alerta de Ressecamento!";
+              const temperatura =
+                alerta.Temperatura || alerta.temperatura || "--";
+              const umidade = alerta.Umidade || alerta.umidade || "--";
+              const dataHora = alerta.DataHora || alerta.dataHora;
+
+              const dataAlerta = new Date(dataHora).getTime();
+
+              if (!dataAlerta || dataAlerta >= limiteTempo) {
+                container.innerHTML += `
+                    <div class="alerta-item">
+                        <span class="badge">PERIGO</span>
+                        <strong style="color: #c0392b;"> ${mensagem}</strong><br>
+                        Temp: ${temperatura}°C | Umidade: ${umidade}%<br>
+                        <small style="color: #7f8c8d;">${new Date(
+                          dataHora
+                        ).toLocaleString("pt-BR")}</small>
+                    </div>
+                `;
+              }
+            });
+
+          if (container.innerHTML === "") {
+            container.innerHTML =
+              "<p>Nenhum alerta recente nas últimas 24h! 🌱</p>";
+          }
+        });
+      async function loopSensorAutomatico() {
+        const tempSimulada = parseFloat(
+          (Math.random() * (38 - 20) + 20).toFixed(1)
+        );
+        const umiSimulada = parseFloat(
+          (Math.random() * (70 - 35) + 35).toFixed(1)
+        );
+
+        document.getElementById("lblTemp").innerText = `${tempSimulada} °C`;
+        document.getElementById("lblUmi").innerText = `${umiSimulada} %`;
+
+        document.getElementById("lblTemp").style.color =
+          tempSimulada > 30 ? "#e74c3c" : "#28a745";
+        document.getElementById("lblUmi").style.color =
+          umiSimulada < 50 ? "#e74c3c" : "#28a745";
+
+        try {
+          const resposta = await fetch(API_URL, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              temperatura: tempSimulada,
+              umidade: umiSimulada,
+            }),
+          });
+
+          const resultado = await resposta.json();
+          document.getElementById(
+            "lblEnvio"
+          ).innerText = `Último envio: ${new Date().toLocaleTimeString()} -> ${
+            resultado.msg
+          }`;
+          document.getElementById("lblEnvio").style.color = "#7f8c8d";
+        } catch (erro) {
+          document.getElementById("lblEnvio").innerText =
+            "Erro ao conectar com a API C#. Verifique se ela está rodando!";
+          document.getElementById("lblEnvio").style.color = "#e74c3c";
+        }
+      }
+
+      loopSensorAutomatico();
+      setInterval(loopSensorAutomatico, 5000);
+    </script>
+  </body>
+</html>
